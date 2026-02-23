@@ -43,4 +43,4 @@
 
 ## Notes
 
-- Extracted from `src/clustering.py` `_merge_similar_topics`.
+- Maintained as a standalone prompt template in this skillset repository.

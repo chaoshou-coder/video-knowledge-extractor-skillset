@@ -25,4 +25,4 @@
 
 ## Notes
 
-- Extracted from `src/fusion.py` `_merge_group`.
+- Maintained as a standalone prompt template in this skillset repository.

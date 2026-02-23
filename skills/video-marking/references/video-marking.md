@@ -33,4 +33,4 @@
 
 ## Notes
 
-- Extracted from `src/workflow.py` `_stage_video_mark`.
+- Maintained as a standalone prompt template in this skillset repository.

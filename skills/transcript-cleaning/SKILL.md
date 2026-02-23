@@ -4,7 +4,7 @@ description: Clean noisy transcript text by removing filler words and low-inform
 license: Apache-2.0
 compatibility: Works in agent environments with Markdown reading. Optional script mode needs Python 3.10+.
 metadata:
-  author: video-knowledge-extractor
+  author: video-knowledge-extractor-skillset
   version: "0.1.0"
   language: zh-CN
 ---

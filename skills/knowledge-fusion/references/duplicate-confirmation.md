@@ -37,4 +37,4 @@
 
 ## Notes
 
-- Extracted from `src/fusion.py` `_confirm_duplicates`.
+- Maintained as a standalone prompt template in this skillset repository.

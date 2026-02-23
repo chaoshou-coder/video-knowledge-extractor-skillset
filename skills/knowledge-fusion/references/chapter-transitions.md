@@ -36,4 +36,4 @@
 
 ## Notes
 
-- Extracted from `src/fusion.py` `generate_transitions`.
+- Maintained as a standalone prompt template in this skillset repository.

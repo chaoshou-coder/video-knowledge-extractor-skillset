@@ -47,4 +47,4 @@ few-shot 示例：
 
 ## Notes
 
-- Extracted from `src/workflow.py` `_stage_structure`.
+- Maintained as a standalone prompt template in this skillset repository.

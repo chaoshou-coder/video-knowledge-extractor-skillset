@@ -4,7 +4,7 @@ description: Analyze structured knowledge content and insert markers for points 
 license: Apache-2.0
 compatibility: Works in agent environments with Markdown references. Optional script mode uses Python 3.10+.
 metadata:
-  author: video-knowledge-extractor
+  author: video-knowledge-extractor-skillset
   version: "0.1.0"
   language: zh-CN
 ---

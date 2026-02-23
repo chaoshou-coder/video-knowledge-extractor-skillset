@@ -4,7 +4,7 @@ description: Segment long transcript text into semantically coherent chunks and 
 license: Apache-2.0
 compatibility: Works in any agent environment that can read Markdown references. Optional script mode needs Python 3.10+.
 metadata:
-  author: video-knowledge-extractor
+  author: video-knowledge-extractor-skillset
   version: "0.1.0"
   language: zh-CN
 ---

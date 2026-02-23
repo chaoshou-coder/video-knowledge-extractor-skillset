@@ -1,270 +1,107 @@
-# Video Knowledge Extractor
+# video-knowledge-extractor-skillset
 
-从视频字幕（SRT/TXT）提取结构化知识并导出教材内容的 CLI 工具。
+独立的 Agent Skillset 仓库。
 
-[![CI](https://github.com/chaoshou-coder/video-knowledge-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/chaoshou-coder/video-knowledge-extractor/actions)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-最小投产指南：[`MINIMAL_PROD_GUIDE.md`](./MINIMAL_PROD_GUIDE.md)
+这个仓库只维护 skills 资产，不包含原 extractor 的运行代码（CLI/API/模型调用编排）。
 
 ---
 
-## 项目状态
+## 项目定位
 
-- 运行形态：**CLI-only**（仅终端交互，支持参数模式 + Wizard 模式）
-- 已移除：桌面 GUI、Web UI/API 入口
-- 核心能力：单文件处理、批处理、跨文档聚类、知识融合、Markdown/HTML/EPUB 导出
-
----
-
-## 功能特性
-
-- 字幕解析：支持标准 `SRT` 和时间戳 `TXT`
-- 智能清洗：规则清理 + LLM 语义分段/子切分/降噪
-- 结构化提取：LLM 提取知识点并合并去重
-- 批处理流水线：并行处理 + 聚类 + 融合 + 导出
-- OpenRouter 路由：支持 `provider_only / provider_order / provider_allow_fallbacks` 等策略
+- 目标：把「分块、清洗、结构化、视频标记、聚类、融合」能力以标准 skill 形式发布
+- 用途：供任意支持 Agent Skills 的环境复用
+- 设计：prompt 模板外置 + references 文档化 + scripts 可选编排
 
 ---
 
-## Skills 架构（Prompt 外置）
+## Skills 列表
 
-项目已将核心 prompt 迁移到 `skills/` 目录，通过 `PromptLoader` 按需加载：
+当前包含 6 个技能：
 
-- `skills/transcript-chunking`
-- `skills/transcript-cleaning`
-- `skills/knowledge-extraction`
-- `skills/video-marking`
-- `skills/knowledge-clustering`
-- `skills/knowledge-fusion`
+1. `transcript-chunking`
+2. `transcript-cleaning`
+3. `knowledge-extraction`
+4. `video-marking`
+5. `knowledge-clustering`
+6. `knowledge-fusion`
 
-每个 skill 目录结构：
+每个 skill 均包含：
 
-- `SKILL.md`：技能说明与元数据
-- `references/*.md`：prompt 模板（含 `{{variable}}` 占位符）
-- `scripts/`：可选脚本入口（用于编排模式）
-
-CLI 可通过 `--skills-dir` 指定自定义 skill 根目录（默认 `./skills`）。
+- `SKILL.md`（frontmatter + 指令）
+- `references/*.md`（模板/规则/参考）
+- `scripts/`（可选脚本）
 
 ---
 
-## 安装
+## 目录结构
 
-```bash
-python -m pip install -e .
-```
-
-安装后可直接使用：
-
-```bash
-kl --help
-```
-
-也可用项目入口脚本：
-
-```bash
-python kl.py --help
+```text
+.
+├─ skills/
+│  ├─ transcript-chunking/
+│  ├─ transcript-cleaning/
+│  ├─ knowledge-extraction/
+│  ├─ video-marking/
+│  ├─ knowledge-clustering/
+│  └─ knowledge-fusion/
+├─ tools/
+│  └─ validate_skills.py
+├─ examples/
+│  ├─ sample1.srt
+│  └─ sample2.txt
+└─ .github/workflows/ci.yml
 ```
 
 ---
 
-## 配置
+## 如何在外部项目使用
 
-复制模板并填写模型配置：
+### 方式 1：作为 skills 目录直接引用
 
-```bash
-# Linux/macOS
-cp config.example.toml config.toml
+将本仓库的 `skills/` 复制或挂载到你的 Agent 项目中，然后由宿主项目按路径加载对应 skill。
 
-# Windows PowerShell
-copy config.example.toml config.toml
-```
+### 方式 2：作为上游子模块/镜像仓库
 
-`config.toml` 示例：
-
-```toml
-[model]
-api_base = "https://openrouter.ai/api/v1"
-api_key = "sk-or-your-api-key"
-model = "google/gemini-2.5-flash-lite"
-timeout = 300
-
-# OpenRouter provider 路由（可选）
-# provider_only = ["azure"]
-# provider_order = ["azure"]
-# provider_allow_fallbacks = false
-# provider_ignore = ["anthropic"]
-# provider_require_parameters = true
-# provider_data_collection = "deny"
-# provider_zdr = true
-# provider_sort = "throughput"
-
-[processing]
-chunk_size = 60000
-```
-
-环境变量：
-
-- `KL_MODEL_API_KEY`：可覆盖 `config.toml` 的 `model.api_key`
-- `KL_APP_URL`：OpenRouter 请求头 `HTTP-Referer`（可选）
-- `KL_APP_NAME`：OpenRouter 请求头 `X-Title`（可选）
+把本仓库作为独立依赖维护，在你的主项目中按版本同步 skills 目录。
 
 ---
 
-## 快速开始
-
-### 1) 单文件处理（mock）
+## 本地校验
 
 ```bash
-python kl.py process examples/sample1.srt --mock -o exports
-python kl.py process examples/sample2.txt --mock -o exports
-```
-
-### 2) 批处理（mock）
-
-```bash
-python kl.py batch examples --mock --workers 2 -o exports
-python kl.py batch examples --mock --build --format markdown -o exports
-```
-
-### 3) 真实模型
-
-```bash
-python kl.py process examples/sample1.srt --config config.toml -o exports_prod
-python kl.py batch examples --config config.toml --build --format markdown -o exports_prod
-```
-
-### 4) 指定外部 skills 目录
-
-```bash
-python kl.py process examples/sample1.srt --mock --skills-dir ./skills -o exports
-python kl.py batch examples --mock --build --skills-dir ./skills -o exports
-```
-
----
-
-## CLI 命令
-
-### `process` 处理单文件
-
-```bash
-kl process [OPTIONS] FILE_PATH
-```
-
-选项：
-
-- `--config`：LLM 配置文件（默认 `config.toml`）
-- `--mock`：模拟模式，不调用外部 API
-- `--video-mark`：启用视频标记阶段（额外 LLM 调用）
-- `-o, --output`：输出目录（默认 `./exports`）
-- `--skills-dir`：skills 根目录（默认 `./skills`）
-
-### `batch` 批处理目录
-
-```bash
-kl batch [OPTIONS] DIRECTORY
-```
-
-选项：
-
-- `-w, --workers`：并行处理数（默认 `3`）
-- `-b, --build`：执行聚类/融合/导出全流水线
-- `-f, --format`：导出格式 `markdown|epub|html|all`（默认 `markdown`）
-- `-o, --output`：输出目录（默认 `./exports`）
-- `--config`：LLM 配置文件（默认 `config.toml`）
-- `--mock`：模拟模式，不调用外部 API
-- `--video-mark`：启用视频标记阶段
-- `--skills-dir`：skills 根目录（默认 `./skills`）
-
-### `status` 查看处理状态
-
-```bash
-kl status
-```
-
-### `parse` 仅解析字幕
-
-```bash
-kl parse examples/sample1.srt
-kl parse examples/sample2.txt
-```
-
-### Wizard 模式
-
-不带子命令直接运行即进入引导式交互：
-
-```bash
-python kl.py
-```
-
----
-
-## 输出说明
-
-### `process` 模式
-
-- 清洗输出：`<output>/<stem>_cleaned.md`
-- 结构化输出：`<output>/<stem>_structured.md`
-
-### `batch` 模式
-
-- 清洗输出目录：`<output>/cleaned/`
-- 结构化输出目录：`<output>/structured/`
-- 如开启 `--build`，还会输出教材文件（按 `--format`）
-
----
-
-## 处理流程（核心业务）
-
-1. 规则清理（无 LLM）
-2. LLM 通读全文并做语义分段
-3. 超限段落按 `chunk_size` 做子切分
-4. 对最终分块做 LLM 清洗降噪
-5. 拼接并保存清洗结果（`_cleaned.md`，含分块策略）
-6. 对清洗块做 LLM 结构化提取
-7. 合并并保存结构化结果（`_structured.md`）
-8. 可选：视频标记阶段（`--video-mark`）
-
----
-
-## 开发与验证
-
-本地最小检查：
-
-```bash
-python -m compileall src kl.py
-ruff check src/
 python tools/validate_skills.py --skills-dir skills
-python kl.py parse examples/sample1.srt
-python kl.py process examples/sample1.srt --mock -o exports_check
-python kl.py process examples/sample2.txt --mock -o exports_check
-python kl.py batch examples --mock --workers 2 -o exports_check
-python kl.py batch examples --mock --build --format markdown -o exports_check
 ```
 
-CI 当前执行：
+这个校验会检查：
 
-- CLI 冒烟：`process sample1.srt` + `process sample2.txt`（mock）
-- 代码检查：`ruff check src/`
+- `SKILL.md` frontmatter 必填字段
+- skill 名称规范（kebab-case，且与目录同名）
+- `references/` 与 `scripts/` 目录存在
+- references 中模板文件的可读性
 
 ---
 
-## 常见问题
+## examples 说明
 
-- `未找到配置文件 config.toml`：先从 `config.example.toml` 复制
-- `401/403`：检查 `api_key` 或 `KL_MODEL_API_KEY`
-- OpenRouter 路由未生效：确认 `provider_only` + `provider_allow_fallbacks = false`
-- 批处理未发现文件：确认目录下存在 `.srt` 或 `.txt`
+`examples/` 中保留了通用字幕样例：
+
+- `examples/sample1.srt`
+- `examples/sample2.txt`
+
+用途：
+
+- skill 模板调试
+- 下游集成项目联调
+- CI/手动验证时的固定输入样本
+
+---
+
+## CI
+
+CI 位于 `.github/workflows/ci.yml`，核心目标是保证 skills 资产结构与格式持续有效。
 
 ---
 
 ## 许可
 
 [MIT License](./LICENSE)
-
-## 贡献
-
-见 [`CONTRIBUTING.md`](./CONTRIBUTING.md)。
- 
-

@@ -1,19 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "video-knowledge-extractor"
+name = "video-knowledge-extractor-skillset"
 version = "0.1.0"
-description = "从视频字幕提取结构化知识"
+description = "Independent agent skills for transcript-to-knowledge workflows."
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "httpx>=0.26.0",
-    "pydantic>=2.0.0",
-    "python-frontmatter>=1.0.0",
-    "tomli>=2.0.0; python_version < '3.11'",
+license = { text = "MIT" }
+authors = [
+    { name = "chaoshou-coder" },
 ]
-
-[project.optional-dependencies]
-vector = ["chromadb>=0.4.22", "sentence-transformers>=2.2.0"]
-export = ["ebooklib>=0.18", "markdown>=3.5.0"]
-full = ["chromadb", "sentence-transformers", "ebooklib", "markdown", "weasyprint>=60.0"]
-
-[project.scripts]
-kl = "src.cli:main"
+keywords = [
+    "agent-skills",
+    "skillset",
+    "video-knowledge",
+    "transcript",
+    "knowledge-extraction",
+]

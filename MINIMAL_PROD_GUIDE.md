@@ -1,101 +1,66 @@
-# 最小可投产使用说明
+# Skillset 最小发布指南
 
-本说明只覆盖上线必需路径：`配置 -> 跑通示例 -> 切换真实模型 -> 批量导出 Markdown`。
+本指南用于维护和发布 `video-knowledge-extractor-skillset`。
 
-## 1) 安装
+目标：保证 skills 目录结构稳定、模板可读、可被下游工程直接引用。
 
-```bash
-python -m pip install -e .
-```
+---
 
-## 2) 配置模型（单模型基建）
+## 1) 修改 skill 资产
 
-复制模板：
+在 `skills/` 下新增或修改目标 skill：
 
-```bash
-cp config.example.toml config.toml
-```
+- `SKILL.md`
+- `references/*.md`
+- `scripts/*`（可选）
 
-编辑 `config.toml`，填写模型参数（`api_base` / `api_key` / `model`）：
+建议一次变更只聚焦一个 skill。
 
-```toml
-[model]
-api_base = "https://openrouter.ai/api/v1"
-api_key = "sk-or-your-api-key"
-model = "openai/gpt-4.1-nano"
-timeout = 300
+---
 
-# OpenRouter provider 路由（可选）
-# provider_only = ["azure"]
-# provider_order = ["azure"]
-# provider_allow_fallbacks = false
-
-[processing]
-chunk_size = 60000
-```
-
-说明：
-- 统一只用一个模型配置，核心业务与具体厂商松耦合。
-- 可用环境变量覆盖 key：`KL_MODEL_API_KEY`。
-- `chunk_size` 是 token 数，建议对齐模型 output limit。
-
-## 2.5) 确认 skills 目录
-
-默认从项目根目录 `./skills` 加载 prompt 模板与 skill 元数据。
-
-如需切换到自定义 skills 根目录，可在命令中显式传入 `--skills-dir`：
+## 2) 本地校验
 
 ```bash
-python kl.py process examples/sample1.srt --mock --skills-dir ./skills -o exports
-python kl.py batch examples --mock --build --skills-dir ./skills -o exports
+python tools/validate_skills.py --skills-dir skills
 ```
 
-## 3) 用 examples 做最小验收（推荐先 mock）
+若失败，优先检查：
 
-项目示例数据：
+- frontmatter 的 `name`/`description`
+- `name` 与目录名是否一致
+- `references/` 和 `scripts/` 是否存在
+
+---
+
+## 3) 样例联调
+
+本仓库保留通用样例：
+
 - `examples/sample1.srt`
 - `examples/sample2.txt`
 
-先跑 mock（不调用真实 API）：
+你可以在下游项目中用这两个样例回归技能效果，确保升级后行为可控。
 
-```bash
-python kl.py process examples/sample1.srt --mock -o exports
-python kl.py process examples/sample2.txt --mock -o exports
-python kl.py batch examples --mock --build --format markdown -o exports
-```
+---
 
-验收标准：
-- 三条命令都成功退出；
-- `exports/` 下生成 `_cleaned.md` 和 `_structured.md`；
-- batch 模式下输出落在 `exports/cleaned/` 与 `exports/structured/`；
-- 控制台显示阶段耗时、总耗时和知识点统计。
+## 4) CI 验证
 
-## 4) 切换真实模型运行
+提交 PR 后，CI 会执行 skills 结构校验（见 `.github/workflows/ci.yml`）。
 
-```bash
-python kl.py process examples/sample1.srt --config config.toml -o exports_prod
-python kl.py batch examples --config config.toml --build --format markdown -o exports_prod
-```
+通过标准：
 
-可选打开视频标记阶段（默认关闭）：
+- skill 校验脚本成功退出
+- Python 工具脚本可编译
 
-```bash
-python kl.py batch examples --config config.toml --build --format markdown -o exports_prod --video-mark
-```
+---
 
-## 5) 交互式 Wizard（人类临时使用）
+## 5) 发布建议
 
-无参数启动即进入引导式交互：
+发布前检查清单：
 
-```bash
-python kl.py
-```
+1. README 已反映最新 skill 列表
+2. `tools/validate_skills.py` 本地通过
+3. CI 全绿
+4. 变更说明清晰（新增 skill、模板调整、兼容性影响）
 
-有参数时走非交互命令模式（更适合 LLM/自动化调用）。
-
-## 6) 最小故障排查
-
-- `未找到配置文件 config.toml`：先复制 `config.example.toml` 并填写。
-- `401/403`：检查 `api_key` 是否有效，或是否被环境变量覆盖成错误值。
-- OpenRouter provider 未生效：确认配置了 `provider_only`，并配套 `provider_allow_fallbacks = false`。
-- `批量处理 0 个文件`：确认目录下存在 `.srt` 或 `.txt`。
+完成后即可打 tag 或发布 release。

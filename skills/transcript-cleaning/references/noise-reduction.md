@@ -29,5 +29,4 @@
 
 ## Notes
 
-- Source extracted from `src/workflow.py` noise reduction stage.
 - Caller may enforce a minimum output length ratio for quality control.
