@@ -24,9 +24,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
+        python -m pip install -e .
         # Ensure runtime imports used by `python kl.py ...` are present in CI smoke jobs.
-        pip install click httpx pydantic python-frontmatter tomli
+        python -m pip install click httpx pydantic python-frontmatter tomli
+        python -c "import click; print('click', click.__version__)"
 
     - name: Run CLI smoke checks
       run: |
@@ -46,7 +47,7 @@ jobs:
 
     - name: Install lint tools
       run: |
-        pip install ruff
+        python -m pip install ruff
 
     - name: Lint with ruff
       run: |
