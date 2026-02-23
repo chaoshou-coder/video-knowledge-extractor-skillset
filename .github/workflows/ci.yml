@@ -16,28 +16,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: "[diag] Show commit SHA"
-      run: git log --oneline -1
-
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Upgrade pip
-      run: python -m pip install --upgrade pip
-
-    - name: Install runtime dependencies explicitly
+    - name: Install runtime dependencies
       run: python -m pip install click httpx pydantic "python-frontmatter>=1.0.0" "tomli>=2.0.0"
 
     - name: Install project in editable mode
       run: python -m pip install -e . || echo "[warn] editable install failed, continuing with explicit deps"
-
-    - name: "[diag] Verify installed packages"
-      run: |
-        python -m pip list | grep -iE "click|httpx|pydantic|frontmatter|tomli"
-        python -c "import click; print('click OK:', click.__version__)"
-        python -c "import httpx; print('httpx OK:', httpx.__version__)"
 
     - name: Run CLI smoke checks
       run: |
