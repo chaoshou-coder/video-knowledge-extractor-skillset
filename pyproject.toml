@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Skills-first runtime for transcript-to-knowledge extraction"
 requires-python = ">=3.10"
 dependencies = [
+    "click>=8.1.0",
     "httpx>=0.26.0",
     "pydantic>=2.0.0",
     "python-frontmatter>=1.0.0",
