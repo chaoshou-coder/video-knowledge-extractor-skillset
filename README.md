@@ -28,6 +28,27 @@
 
 ---
 
+## Skills 架构（Prompt 外置）
+
+项目已将核心 prompt 迁移到 `skills/` 目录，通过 `PromptLoader` 按需加载：
+
+- `skills/transcript-chunking`
+- `skills/transcript-cleaning`
+- `skills/knowledge-extraction`
+- `skills/video-marking`
+- `skills/knowledge-clustering`
+- `skills/knowledge-fusion`
+
+每个 skill 目录结构：
+
+- `SKILL.md`：技能说明与元数据
+- `references/*.md`：prompt 模板（含 `{{variable}}` 占位符）
+- `scripts/`：可选脚本入口（用于编排模式）
+
+CLI 可通过 `--skills-dir` 指定自定义 skill 根目录（默认 `./skills`）。
+
+---
+
 ## 安装
 
 ```bash
@@ -114,6 +135,13 @@ python kl.py process examples/sample1.srt --config config.toml -o exports_prod
 python kl.py batch examples --config config.toml --build --format markdown -o exports_prod
 ```
 
+### 4) 指定外部 skills 目录
+
+```bash
+python kl.py process examples/sample1.srt --mock --skills-dir ./skills -o exports
+python kl.py batch examples --mock --build --skills-dir ./skills -o exports
+```
+
 ---
 
 ## CLI 命令
@@ -130,6 +158,7 @@ kl process [OPTIONS] FILE_PATH
 - `--mock`：模拟模式，不调用外部 API
 - `--video-mark`：启用视频标记阶段（额外 LLM 调用）
 - `-o, --output`：输出目录（默认 `./exports`）
+- `--skills-dir`：skills 根目录（默认 `./skills`）
 
 ### `batch` 批处理目录
 
@@ -146,6 +175,7 @@ kl batch [OPTIONS] DIRECTORY
 - `--config`：LLM 配置文件（默认 `config.toml`）
 - `--mock`：模拟模式，不调用外部 API
 - `--video-mark`：启用视频标记阶段
+- `--skills-dir`：skills 根目录（默认 `./skills`）
 
 ### `status` 查看处理状态
 
@@ -205,6 +235,7 @@ python kl.py
 ```bash
 python -m compileall src kl.py
 ruff check src/
+python tools/validate_skills.py --skills-dir skills
 python kl.py parse examples/sample1.srt
 python kl.py process examples/sample1.srt --mock -o exports_check
 python kl.py process examples/sample2.txt --mock -o exports_check

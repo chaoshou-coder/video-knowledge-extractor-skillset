@@ -49,3 +49,7 @@ jobs:
     - name: Lint with ruff
       run: |
         ruff check src/
+
+    - name: Validate skills layout
+      run: |
+        python tools/validate_skills.py --skills-dir skills

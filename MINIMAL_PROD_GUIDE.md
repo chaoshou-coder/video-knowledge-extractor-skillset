@@ -39,6 +39,17 @@ chunk_size = 60000
 - 可用环境变量覆盖 key：`KL_MODEL_API_KEY`。
 - `chunk_size` 是 token 数，建议对齐模型 output limit。
 
+## 2.5) 确认 skills 目录
+
+默认从项目根目录 `./skills` 加载 prompt 模板与 skill 元数据。
+
+如需切换到自定义 skills 根目录，可在命令中显式传入 `--skills-dir`：
+
+```bash
+python kl.py process examples/sample1.srt --mock --skills-dir ./skills -o exports
+python kl.py batch examples --mock --build --skills-dir ./skills -o exports
+```
+
 ## 3) 用 examples 做最小验收（推荐先 mock）
 
 项目示例数据：

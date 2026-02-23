@@ -12,6 +12,7 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional, Protocol
 
 from .llm_provider import ProviderRegistry
+from .prompt_loader import PromptLoader
 from .srt_parser import SRTParser
 
 
@@ -151,7 +152,7 @@ class ProgressTracker:
 class TextCleaner:
     """Stage 1: 规则清理，无需 LLM。"""
 
-    NOISE_PATTERNS = [
+    DEFAULT_NOISE_PATTERNS = [
         (
             r"\b(um|uh|uhh|erm|like|you know|right|so|well|okay|ok|actually|basically|literally)\b[,.]?\s*",
             "",
@@ -162,9 +163,40 @@ class TextCleaner:
         (r"\n\s*\n\s*\n+", "\n\n"),
     ]
 
+    def __init__(self, rules_reference_path: Path | None = None):
+        self.noise_patterns = self._load_noise_patterns_from_markdown(rules_reference_path)
+
+    def _load_noise_patterns_from_markdown(
+        self, rules_reference_path: Path | None
+    ) -> List[tuple[str, str]]:
+        if not rules_reference_path or not rules_reference_path.exists():
+            return self.DEFAULT_NOISE_PATTERNS
+
+        try:
+            markdown = rules_reference_path.read_text(encoding="utf-8")
+            rows = re.findall(
+                r"^\|\s*\d+\s*\|\s*`([^`]+)`\s*\|\s*`([^`]*)`\s*\|",
+                markdown,
+                flags=re.MULTILINE,
+            )
+            if not rows:
+                return self.DEFAULT_NOISE_PATTERNS
+            normalized: List[tuple[str, str]] = []
+            for pattern, replacement in rows:
+                try:
+                    pattern_decoded = bytes(pattern, "utf-8").decode("unicode_escape")
+                    replacement_decoded = bytes(replacement, "utf-8").decode("unicode_escape")
+                except Exception:
+                    pattern_decoded = pattern
+                    replacement_decoded = replacement
+                normalized.append((pattern_decoded, replacement_decoded))
+            return normalized or self.DEFAULT_NOISE_PATTERNS
+        except Exception:
+            return self.DEFAULT_NOISE_PATTERNS
+
     def clean(self, text: str) -> str:
         original_length = len(text)
-        for pattern, replacement in self.NOISE_PATTERNS:
+        for pattern, replacement in self.noise_patterns:
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
         text = re.sub(r"[ \t]+", " ", text)
@@ -301,6 +333,7 @@ class WorkflowEngine:
         chunk_size: int = 60000,
         output_dir: str = "./exports",
         split_output_dirs: bool = False,
+        skills_dir: str | Path | None = None,
     ):
         if isinstance(providers, ProviderRegistry):
             self.providers = providers
@@ -313,8 +346,18 @@ class WorkflowEngine:
         else:
             raise TypeError("providers 必须是 ProviderRegistry 或具备 generate() 的对象")
 
+        self.skills_dir = (
+            Path(skills_dir)
+            if skills_dir is not None
+            else Path(__file__).resolve().parent.parent / "skills"
+        )
+        self.prompt_loader = PromptLoader(self.skills_dir)
+
+        cleaning_rules_reference = (
+            self.skills_dir / "transcript-cleaning" / "references" / "rule-patterns.md"
+        )
         self.tracker = tracker
-        self.cleaner = TextCleaner()
+        self.cleaner = TextCleaner(rules_reference_path=cleaning_rules_reference)
         self.enable_video_mark = enable_video_mark
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -412,33 +455,21 @@ class WorkflowEngine:
     def _estimate_tokens(self, text: str) -> int:
         return max(1, int(len(text) / 3))
 
+    def _load_skill_prompt(self, skill_name: str, reference_name: str, **variables: Any) -> str:
+        return self.prompt_loader.load(skill_name, reference_name, **variables)
+
     async def _stage_semantic_segmentation(self, text: str) -> List[SemanticSegment]:
         lines = text.splitlines()
         if not lines:
             return [SemanticSegment(title="全文", start_line=1, end_line=1, content=text)]
 
         numbered_text = "\n".join(f"{idx + 1}|{line}" for idx, line in enumerate(lines))
-        prompt = f"""语义分段任务：
-请你通读全文，根据主题连续性划分段落。
-
-要求：
-1) 输出 JSON，不要输出正文；
-2) 每段必须包含 title、start_line、end_line；
-3) start_line/end_line 使用下方行号（1 开始）；
-4) 段落按出现顺序排列，尽量覆盖全文。
-
-总行数: {len(lines)}
-
-文本（带行号）：
-{numbered_text}
-
-输出格式：
-{{
-  "segments": [
-    {{"title": "段落标题", "start_line": 1, "end_line": 120}}
-  ]
-}}
-"""
+        prompt = self._load_skill_prompt(
+            "transcript-chunking",
+            "semantic-segmentation",
+            total_lines=len(lines),
+            numbered_text=numbered_text,
+        )
         try:
             result = await self.llm.generate(prompt, temperature=0.1)
             data = self._parse_json_response(result)
@@ -555,28 +586,15 @@ class WorkflowEngine:
         return chunks
 
     async def _llm_sub_chunk_segment(self, segment: SemanticSegment) -> List[TextChunk]:
-        prompt = f"""子切分任务：
-以下是一个语义连续的大段内容，请按内容边界再切分为多个子块。
-
-约束：
-1) 每个子块建议不超过 {self.chunk_size} token；
-2) 必须保持原始顺序，不能改写事实；
-3) 必须输出每个子块的具体内容；
-4) 只输出 JSON。
-
-输出格式：
-{{
-  "chunks": [
-    {{"title": "子块标题", "content": "子块正文"}}
-  ]
-}}
-
-原段标题：{segment.title}
-原段行号：{segment.start_line}-{segment.end_line}
-
-原段内容：
-{segment.content}
-"""
+        prompt = self._load_skill_prompt(
+            "transcript-chunking",
+            "sub-chunking",
+            chunk_size=self.chunk_size,
+            segment_title=segment.title,
+            segment_start_line=segment.start_line,
+            segment_end_line=segment.end_line,
+            segment_content=segment.content,
+        )
         try:
             result = await self.llm.generate(prompt, temperature=0.1)
             data = self._parse_json_response(result)
@@ -681,17 +699,9 @@ class WorkflowEngine:
                     print(f"\r{msg}")
 
         async def _clean_chunk(index: int, chunk: TextChunk) -> TextChunk:
-            prompt = f"""清洗任务：
-请清洗以下文本片段，删除口水话但保留信息细节。
-
-要求：
-1) 仅删除语气词、寒暄、重复强调和无信息量过渡句；
-2) 保留所有事实、观点、术语、方法、数据、论据；
-3) 不要摘要，不要改写逻辑顺序；
-
-片段：
-{chunk.content}
-"""
+            prompt = self._load_skill_prompt(
+                "transcript-cleaning", "noise-reduction", chunk_content=chunk.content
+            )
             try:
                 async with semaphore:
                     cleaned = await self.llm.generate(prompt, temperature=0.1)
@@ -737,34 +747,11 @@ class WorkflowEngine:
                     print(f"\r{msg}")
 
         async def _extract_chunk(index: int, chunk: TextChunk) -> List[KnowledgePoint]:
-            prompt = f"""结构化提取任务：
-从下述清洗后的讲座片段中提取尽可能完整的知识点，不要遗漏细节。
-
-提取维度：
-- 概念定义
-- 方法步骤
-- 事实信息
-- 数据与结论
-- 实践经验
-
-要求：
-1) 输出 JSON，字段必须是 points；
-2) 每条 point 至少包含 title/content；
-3) content 要保留细节，不要只写一句概括。
-
-few-shot 示例：
-{{
-  "points": [
-    {{
-      "title": "强化学习在后训练中的作用",
-      "content": "后训练阶段使用强化学习对模型行为进行目标对齐，关键环节包括奖励建模、策略迭代与评估闭环。该片段还强调了基础设施稳定性对实验吞吐量的影响。"
-    }}
-  ]
-}}
-
-当前片段：
-{chunk.content}
-"""
+            prompt = self._load_skill_prompt(
+                "knowledge-extraction",
+                "structured-extraction",
+                chunk_content=chunk.content,
+            )
             try:
                 async with semaphore:
                     result = await self.llm.generate(prompt, temperature=0.2)
@@ -886,15 +873,12 @@ few-shot 示例：
 
     async def _stage_video_mark(self, doc: Document) -> Document:
         for point in doc.knowledge_points:
-            prompt = f"""分析以下知识点内容，判断是否需要配合视频画面才能理解：
-
-知识点：{point.title}
-内容：{point.content}
-
-如果需要视频画面（如图表、公式推导、动画），在相关段落前插入标记：
-[需看视频画面: 时间范围]（图示说明）
-
-输出修改后的内容（如无视频需求则输出原文）："""
+            prompt = self._load_skill_prompt(
+                "video-marking",
+                "video-marking",
+                point_title=point.title,
+                point_content=point.content,
+            )
 
             try:
                 marked_content = await self.llm.generate(

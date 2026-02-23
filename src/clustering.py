@@ -7,8 +7,10 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict
+from pathlib import Path
+from typing import Any, Dict, List
 
+from .prompt_loader import PromptLoader
 from .workflow import KnowledgePoint
 
 logger = logging.getLogger(__name__)
@@ -55,12 +57,27 @@ class CourseStructure:
 class CrossDocumentClusteringSkill:
     """跨文档知识点聚类 Skill - LLM 驱动"""
 
-    def __init__(self, llm_client, max_points_per_batch: int = 50):
+    def __init__(
+        self,
+        llm_client,
+        max_points_per_batch: int = 50,
+        skills_dir: str | Path | None = None,
+        prompt_loader: PromptLoader | None = None,
+    ):
         self.llm = llm_client
         self.max_points_per_batch = max_points_per_batch
+        self.skills_dir = (
+            Path(skills_dir)
+            if skills_dir is not None
+            else Path(__file__).resolve().parent.parent / "skills"
+        )
+        self.prompt_loader = prompt_loader or PromptLoader(self.skills_dir)
         logger.info(
             f"初始化 CrossDocumentClusteringSkill (max_points={max_points_per_batch})"
         )
+
+    def _load_skill_prompt(self, reference_name: str, **variables: Any) -> str:
+        return self.prompt_loader.load("knowledge-clustering", reference_name, **variables)
 
     async def cluster(self, all_points: List[KnowledgePoint]) -> CourseStructure:
         """
@@ -116,38 +133,11 @@ class CrossDocumentClusteringSkill:
                 for i, p in enumerate(batch_points)
             ]
 
-            prompt = f"""分析以下 {len(batch_points)} 个知识点，识别其中的主题聚类。
-
-知识点列表:
-{chr(10).join(point_summaries)}
-
-任务:
-1. 识别主要主题（3-10个主题）
-2. 为每个主题确定:
-   - 主题名称（简洁明确）
-   - 主题描述（1-2句话）
-   - 包含的知识点索引
-   - 关键词（3-5个）
-
-按以下 JSON 格式输出:
-{{
-  "topics": [
-    {{
-      "id": "topic_1",
-      "title": "主题名称",
-      "description": "主题描述",
-      "point_indices": [0, 1, 2],
-      "keywords": ["关键词1", "关键词2"]
-    }}
-  ]
-}}
-
-注意:
-- 一个知识点可以属于多个主题
-- 主题应该有明确的边界，避免过度重叠
-- 按重要性排序主题
-
-只输出 JSON，不要有其他内容:"""
+            prompt = self._load_skill_prompt(
+                "topic-identification",
+                point_count=len(batch_points),
+                point_summaries="\n".join(point_summaries),
+            )
 
             try:
                 result = await self.llm.generate(prompt, temperature=0.3)
@@ -204,35 +194,11 @@ class CrossDocumentClusteringSkill:
             for i, t in enumerate(topics)
         ]
 
-        prompt = f"""分析以下 {len(topics)} 个主题，识别可以合并的相似主题。
-
-主题列表:
-{chr(10).join(topic_summaries)}
-
-任务:
-1. 识别标题或关键词高度相似的主题
-2. 建议合并方案
-3. 返回合并后的主题列表
-
-按 JSON 输出:
-{{
-  "merged_topics": [
-    {{
-      "id": "topic_1",
-      "title": "合并后标题",
-      "description": "合并后描述",
-      "original_indices": [0, 2],
-      "keywords": ["关键词1", "关键词2"]
-    }}
-  ]
-}}
-
-注意:
-- 只有高度相似的主题才合并
-- 保持主题数量在 5-10 个
-- 未合并的主题保持原样
-
-只输出 JSON:"""
+        prompt = self._load_skill_prompt(
+            "topic-merging",
+            topic_count=len(topics),
+            topic_summaries="\n".join(topic_summaries),
+        )
 
         try:
             result = await self.llm.generate(prompt, temperature=0.2)
@@ -286,40 +252,11 @@ class CrossDocumentClusteringSkill:
             for i, t in enumerate(topics)
         ]
 
-        prompt = f"""基于以下 {len(topics)} 个主题，设计教材的章节结构。
-
-主题列表:
-{chr(10).join(topic_summaries)}
-
-任务:
-1. 将主题组织为教材章节（3-8章）
-2. 确定章节顺序（考虑知识依赖关系）
-3. 识别章节间的前置关系
-
-按 JSON 输出:
-{{
-  "course_name": "课程名称（简洁专业）",
-  "chapters": [
-    {{
-      "order": 1,
-      "title": "章节标题",
-      "topic_ids": ["topic_1", "topic_2"],
-      "description": "章节描述",
-      "learning_objectives": ["目标1", "目标2"]
-    }}
-  ],
-  "prerequisites": {{
-    "章节标题": ["前置章节标题1", "前置章节标题2"]
-  }}
-}}
-
-注意:
-- 章节标题要专业、清晰
-- 考虑知识点的逻辑依赖
-- 每章包含2-4个相关主题
-- 前置关系要合理
-
-只输出 JSON:"""
+        prompt = self._load_skill_prompt(
+            "course-structure",
+            topic_count=len(topics),
+            topic_summaries="\n".join(topic_summaries),
+        )
 
         try:
             result = await self.llm.generate(prompt, temperature=0.3)

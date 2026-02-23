@@ -7,9 +7,11 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict
 from difflib import SequenceMatcher
+from pathlib import Path
+from typing import Any, Dict, List
 
+from .prompt_loader import PromptLoader
 from .workflow import KnowledgePoint
 
 logger = logging.getLogger(__name__)
@@ -52,10 +54,25 @@ class DuplicateGroup:
 class KnowledgeFusionSkill:
     """知识融合 Skill - 智能去重 + 整合"""
 
-    def __init__(self, llm_client, similarity_threshold: float = 0.75):
+    def __init__(
+        self,
+        llm_client,
+        similarity_threshold: float = 0.75,
+        skills_dir: str | Path | None = None,
+        prompt_loader: PromptLoader | None = None,
+    ):
         self.llm = llm_client
         self.similarity_threshold = similarity_threshold
+        self.skills_dir = (
+            Path(skills_dir)
+            if skills_dir is not None
+            else Path(__file__).resolve().parent.parent / "skills"
+        )
+        self.prompt_loader = prompt_loader or PromptLoader(self.skills_dir)
         logger.info(f"初始化 KnowledgeFusionSkill (threshold={similarity_threshold})")
+
+    def _load_skill_prompt(self, reference_name: str, **variables: Any) -> str:
+        return self.prompt_loader.load("knowledge-fusion", reference_name, **variables)
 
     async def merge_duplicates(
         self, points: List[KnowledgePoint]
@@ -171,30 +188,10 @@ class KnowledgeFusionSkill:
                 for i, p in zip(group_indices, group_points)
             ]
 
-            prompt = f"""分析以下知识点，判断它们是否重复或高度相似。
-
-知识点:
-{chr(10).join(point_descriptions)}
-
-任务:
-1. 判断这些知识点是否重复（描述同一概念）
-2. 如果是重复的，选择最佳标题
-3. 给出置信度分数 (0.0-1.0)
-
-按 JSON 输出:
-{{
-  "is_duplicate": true,
-  "best_title": "最佳标题",
-  "confidence": 0.9,
-  "reason": "解释原因"
-}}
-
-注意:
-- 标题相似但内容不同不算重复
-- 同一概念的不同表述算重复
-- 置信度 > 0.8 才认为是重复
-
-只输出 JSON:"""
+            prompt = self._load_skill_prompt(
+                "duplicate-confirmation",
+                point_descriptions="\n".join(point_descriptions),
+            )
 
             try:
                 result = await self.llm.generate(prompt, temperature=0.2)
@@ -265,17 +262,11 @@ class KnowledgeFusionSkill:
         for i, p in enumerate(points[:5]):  # 最多合并5个
             contents.append(f"版本 {i+1}:\n标题: {p.title}\n内容: {p.content[:1000]}")
 
-        prompt = f"""整合以下 {len(points)} 个相似知识点，生成一个完整的版本。
-
-{chr(10).join(contents)}
-
-任务:
-1. 合并所有独特信息，删除重复内容
-2. 确保逻辑连贯，结构清晰
-3. 保留最重要的概念和细节
-4. 优化语言表达
-
-输出整合后的完整内容（保持知识点的详细程度）:"""
+        prompt = self._load_skill_prompt(
+            "content-merge",
+            point_count=len(points),
+            contents="\n".join(contents),
+        )
 
         try:
             merged_content = await self.llm.generate(prompt, temperature=0.3)
@@ -371,26 +362,13 @@ class KnowledgeFusionSkill:
             prev_desc = prev_ch.get("description", prev_ch.get("title", ""))
             curr_desc = curr_ch.get("description", curr_ch.get("title", ""))
 
-            prompt = f"""为教材章节之间写一段衔接段落。
-
-上一章 "{prev_ch.get('title', '')}" 的内容:
-{prev_desc[:200]}
-
-本章 "{curr_ch.get('title', '')}" 将要介绍:
-{curr_desc[:200]}
-
-任务:
-写一段 2-3 句话的过渡段落，说明:
-1. 上一章的核心收获
-2. 本章与上一章的联系
-3. 本章的学习价值
-
-要求:
-- 语言流畅自然
-- 避免过于生硬
-- 激发学习兴趣
-
-直接输出段落内容:"""
+            prompt = self._load_skill_prompt(
+                "chapter-transitions",
+                prev_title=prev_ch.get("title", ""),
+                prev_desc=prev_desc[:200],
+                curr_title=curr_ch.get("title", ""),
+                curr_desc=curr_desc[:200],
+            )
 
             try:
                 transition = await self.llm.generate(prompt, temperature=0.4)

@@ -49,6 +49,7 @@ def _build_runtime(
     enable_video_mark: bool,
     output_dir: str,
     split_output_dirs: bool = False,
+    skills_dir: Path = Path("./skills"),
 ) -> Tuple[WorkflowEngine, Optional[ProviderRegistry], object]:
     tracker = ProgressTracker(db_path)
     if mock:
@@ -63,6 +64,7 @@ def _build_runtime(
             chunk_size=chunk_size,
             output_dir=output_dir,
             split_output_dirs=split_output_dirs,
+            skills_dir=skills_dir,
         )
     else:
         providers = ProviderRegistry.from_config(config_path)
@@ -73,6 +75,7 @@ def _build_runtime(
             enable_video_mark=enable_video_mark,
             output_dir=output_dir,
             split_output_dirs=split_output_dirs,
+            skills_dir=skills_dir,
         )
     return engine, providers, downstream_llm
 
@@ -111,6 +114,7 @@ async def _run_batch_pipeline(
     build: bool,
     export_format: str,
     output_dir: str,
+    skills_dir: Path,
 ) -> Dict[str, object]:
     processor = ParallelProcessor(engine, max_workers=workers)
 
@@ -130,12 +134,12 @@ async def _run_batch_pipeline(
         all_points.extend(doc.knowledge_points)
 
     click.echo("阶段 3: 知识融合...")
-    fusion = KnowledgeFusionSkill(llm_client)
+    fusion = KnowledgeFusionSkill(llm_client, skills_dir=skills_dir)
     merged_points = await fusion.merge_duplicates(all_points)
     click.echo(f"去重后: {len(merged_points)} 个知识点")
 
     click.echo("\n阶段 4: 课程聚类...")
-    clustering = CrossDocumentClusteringSkill(llm_client)
+    clustering = CrossDocumentClusteringSkill(llm_client, skills_dir=skills_dir)
     structure = await clustering.cluster(merged_points)
     click.echo(f"课程: {structure.name}")
     click.echo(f"章节: {len(structure.chapters)} 个")
@@ -173,6 +177,7 @@ def _run_process_flow(
     mock: bool,
     enable_video_mark: bool,
     output_dir: Path | None = None,
+    skills_dir: Path = Path("./skills"),
 ) -> None:
     target_output_dir = output_dir or Path("./exports")
     engine, providers, _ = _build_runtime(
@@ -182,6 +187,7 @@ def _run_process_flow(
         enable_video_mark=enable_video_mark,
         output_dir=str(target_output_dir),
         split_output_dirs=False,
+        skills_dir=skills_dir,
     )
     if mock:
         click.echo("模拟模式: 使用 Mock LLM，不调用外部 API")
@@ -236,6 +242,7 @@ def _run_batch_flow(
     config_path: Path,
     mock: bool,
     enable_video_mark: bool,
+    skills_dir: Path = Path("./skills"),
 ) -> None:
     engine, providers, llm_client = _build_runtime(
         db_path=db_path,
@@ -244,6 +251,7 @@ def _run_batch_flow(
         enable_video_mark=enable_video_mark,
         output_dir=output_dir,
         split_output_dirs=True,
+        skills_dir=skills_dir,
     )
     if mock:
         click.echo("模拟模式: 使用 Mock LLM，不调用外部 API")
@@ -260,6 +268,7 @@ def _run_batch_flow(
             build=build,
             export_format=export_format,
             output_dir=output_dir,
+            skills_dir=skills_dir,
         )
     )
 
@@ -284,6 +293,7 @@ def _wizard(db_path: str) -> None:
     config_path = Path(
         click.prompt("配置文件路径", type=str, default="config.toml")
     )
+    skills_dir = Path(click.prompt("skills 目录路径", type=str, default="./skills"))
     enable_video_mark = click.confirm(
         "是否启用视频标记阶段（会增加一轮 LLM 调用）？",
         default=False,
@@ -309,6 +319,7 @@ def _wizard(db_path: str) -> None:
                     default="exports",
                 )
             ),
+            skills_dir=skills_dir,
         )
         return
 
@@ -337,6 +348,7 @@ def _wizard(db_path: str) -> None:
         config_path=config_path,
         mock=mock,
         enable_video_mark=enable_video_mark,
+        skills_dir=skills_dir,
     )
 
 
@@ -369,6 +381,13 @@ def cli(ctx: click.Context, db: str) -> None:
     show_default=True,
     help="process 输出目录（会生成 *_cleaned.md 与 *_structured.md）",
 )
+@click.option(
+    "--skills-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("./skills"),
+    show_default=True,
+    help="skills 目录路径（用于加载 prompt 模板）",
+)
 @click.pass_context
 def process(
     ctx: click.Context,
@@ -377,6 +396,7 @@ def process(
     mock: bool,
     video_mark: bool,
     output: Path,
+    skills_dir: Path,
 ) -> None:
     """处理单个文件"""
     _run_process_flow(
@@ -386,6 +406,7 @@ def process(
         mock=mock,
         enable_video_mark=video_mark,
         output_dir=output,
+        skills_dir=skills_dir,
     )
 
 
@@ -411,6 +432,13 @@ def process(
 )
 @click.option("--mock", is_flag=True, help="模拟模式（不调用外部 API）")
 @click.option("--video-mark", is_flag=True, help="启用视频标记阶段")
+@click.option(
+    "--skills-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("./skills"),
+    show_default=True,
+    help="skills 目录路径（用于加载 prompt 模板）",
+)
 @click.pass_context
 def batch(
     ctx: click.Context,
@@ -422,6 +450,7 @@ def batch(
     config: str,
     mock: bool,
     video_mark: bool,
+    skills_dir: Path,
 ) -> None:
     """批量处理目录"""
     _run_batch_flow(
@@ -434,6 +463,7 @@ def batch(
         config_path=Path(config),
         mock=mock,
         enable_video_mark=video_mark,
+        skills_dir=skills_dir,
     )
 
 

@@ -19,6 +19,9 @@ python -m compileall src kl.py
 # CLI smoke check
 python kl.py process examples/sample1.srt --mock -o exports_check
 python kl.py process examples/sample2.txt --mock -o exports_check
+
+# Skill layout validation
+python tools/validate_skills.py --skills-dir skills
 ```
 
 ## Code Style
@@ -26,6 +29,22 @@ python kl.py process examples/sample2.txt --mock -o exports_check
 - Follow PEP 8
 - Use type hints where appropriate
 - Add docstrings for public functions
+
+## Contributing Skills
+
+When adding or updating skills under `skills/`:
+
+1. Keep skill folder name in lowercase kebab-case.
+2. Ensure `SKILL.md` has valid frontmatter (`name`, `description`).
+3. Put prompt templates in `references/*.md` with:
+   - `## Template` section
+   - non-empty fenced template block
+4. Keep `scripts/` directory present for orchestrated usage.
+5. Run validation before opening PR:
+
+```bash
+python tools/validate_skills.py --skills-dir skills
+```
 
 ## Submitting Changes
 
