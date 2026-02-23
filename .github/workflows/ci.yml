@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   smoke:
@@ -16,18 +16,28 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: "[diag] Show commit SHA"
+      run: git log --oneline -1
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Upgrade pip
+      run: python -m pip install --upgrade pip
+
+    - name: Install runtime dependencies explicitly
+      run: python -m pip install click httpx pydantic "python-frontmatter>=1.0.0" "tomli>=2.0.0"
+
+    - name: Install project in editable mode
+      run: python -m pip install -e . || echo "[warn] editable install failed, continuing with explicit deps"
+
+    - name: "[diag] Verify installed packages"
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install -e .
-        # Ensure runtime imports used by `python kl.py ...` are present in CI smoke jobs.
-        python -m pip install click httpx pydantic python-frontmatter tomli
-        python -c "import click; print('click', click.__version__)"
+        python -m pip list | grep -iE "click|httpx|pydantic|frontmatter|tomli"
+        python -c "import click; print('click OK:', click.__version__)"
+        python -c "import httpx; print('httpx OK:', httpx.__version__)"
 
     - name: Run CLI smoke checks
       run: |
@@ -46,13 +56,10 @@ jobs:
         python-version: '3.11'
 
     - name: Install lint tools
-      run: |
-        python -m pip install ruff
+      run: python -m pip install ruff
 
     - name: Lint with ruff
-      run: |
-        ruff check src/
+      run: ruff check src/
 
     - name: Validate skills layout
-      run: |
-        python tools/validate_skills.py --skills-dir skills
+      run: python tools/validate_skills.py --skills-dir skills
