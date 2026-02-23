@@ -46,4 +46,4 @@
 
 ## Notes
 
-- Maintained as a standalone prompt template in this skillset repository.
+- Extracted from `src/clustering.py` `_identify_topics`.

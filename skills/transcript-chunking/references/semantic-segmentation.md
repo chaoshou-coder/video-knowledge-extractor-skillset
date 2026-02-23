@@ -41,4 +41,5 @@
 
 ## Notes
 
+- Source extracted from `src/workflow.py` semantic segmentation stage.
 - This prompt is intentionally strict to reduce downstream parser errors.

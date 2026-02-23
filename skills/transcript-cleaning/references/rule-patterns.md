@@ -23,4 +23,5 @@ After applying the table above:
 
 ## Notes
 
+- Source extracted from `TextCleaner.NOISE_PATTERNS` in `src/workflow.py`.
 - Keep this file synchronized with script/code fallback patterns.

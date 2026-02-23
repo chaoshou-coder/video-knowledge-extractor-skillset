@@ -45,4 +45,5 @@
 
 ## Notes
 
+- Source extracted from `src/workflow.py` sub-chunk stage.
 - Caller should run this only for oversized segments.
